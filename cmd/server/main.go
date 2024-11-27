@@ -4,10 +4,11 @@ import (
 	"fmt"
 	"os"
 
+	amqp "github.com/rabbitmq/amqp091-go"
+
 	"github.com/bootdotdev/learn-pub-sub-starter/internal/pubsub"
 	"github.com/bootdotdev/learn-pub-sub-starter/internal/routing"
 	"github.com/bootdotdev/learn-pub-sub-starter/internal/signals"
-	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 func main() {

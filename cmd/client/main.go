@@ -3,13 +3,13 @@ package main
 import (
 	"fmt"
 	"os"
-	"os/signal"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 
 	"github.com/bootdotdev/learn-pub-sub-starter/internal/gamelogic"
 	"github.com/bootdotdev/learn-pub-sub-starter/internal/pubsub"
 	"github.com/bootdotdev/learn-pub-sub-starter/internal/routing"
+	"github.com/bootdotdev/learn-pub-sub-starter/internal/signals"
 )
 
 func main() {
@@ -46,10 +46,7 @@ func main() {
 		fmt.Println("Error declaring queue:", err)
 		os.Exit(1)
 	}
-	sc := make(chan os.Signal, 1)
-	signal.Notify(sc, os.Interrupt)
-	for range sc {
-		fmt.Println("\nInterrupt detected. Exiting...")
-		break
-	}
+	signals.WaitForInterrupt()
+	fmt.Println("\nInterrupt detected. Exiting...")
+
 }

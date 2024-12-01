@@ -6,10 +6,33 @@ import (
 
 	amqp "github.com/rabbitmq/amqp091-go"
 
+	"github.com/bootdotdev/learn-pub-sub-starter/internal/gamelogic"
 	"github.com/bootdotdev/learn-pub-sub-starter/internal/pubsub"
 	"github.com/bootdotdev/learn-pub-sub-starter/internal/routing"
 	"github.com/bootdotdev/learn-pub-sub-starter/internal/signals"
 )
+
+func mustPublishJSON[T any](ch *amqp.Channel, exchange, key string, val T) {
+	err := pubsub.PublishJSON(
+		ch,
+		exchange,
+		key,
+		val,
+	)
+	if err != nil {
+		fmt.Println("Error sending pubsub message:", err)
+		os.Exit(1)
+	}
+}
+
+func mustPublishPaused(ch *amqp.Channel, paused bool) {
+	mustPublishJSON(
+		ch,
+		routing.ExchangePerilDirect,
+		routing.PauseKey,
+		routing.PlayingState{IsPaused: paused},
+	)
+}
 
 func main() {
 	fmt.Println("Startng Peril server...")
@@ -17,7 +40,7 @@ func main() {
 	url := "amqp://guest:guest@localhost:5672/"
 	conn, err := amqp.Dial(url)
 	if err != nil {
-		fmt.Println("Error:", err)
+		fmt.Println("Error dialing:", err)
 		os.Exit(1)
 	}
 
@@ -26,7 +49,7 @@ func main() {
 		fmt.Println("Closed RabbitMQ connection.")
 	}()
 
-	fmt.Println("Connected to RabbitMQ. Press Ctrl + C to exit.")
+	fmt.Println("Connected to RabbitMQ. Press Ctrl + C or enter 'quit' to exit.")
 
 	ch, err := conn.Channel()
 	if err != nil {
@@ -34,17 +57,30 @@ func main() {
 		os.Exit(1)
 	}
 
-	err = pubsub.PublishJSON(
-		ch,
-		routing.ExchangePerilDirect,
-		routing.PauseKey,
-		routing.PlayingState{IsPaused: true},
-	)
-	if err != nil {
-		fmt.Println("Error sending pubsub message:", err)
-		os.Exit(1)
-	}
+	go func() {
+		signals.WaitForInterrupt()
+		// Maybe send pause or some message to client?
+		fmt.Println("\nInterrupt detected. Exiting...")
+		os.Exit(0)
+	}()
 
-	signals.WaitForInterrupt()
-	fmt.Println("\nInterrupt detected. Exiting...")
+	gamelogic.PrintServerHelp()
+	for {
+		input := gamelogic.GetInput()
+		if len(input) == 0 {
+			continue
+		}
+
+		switch input[0] {
+		case "quit":
+			gamelogic.PrintQuit()
+			os.Exit(0)
+		case "help":
+			gamelogic.PrintServerHelp()
+		case "pause":
+			mustPublishPaused(ch, true)
+		case "resume":
+			mustPublishPaused(ch, false)
+		}
+	}
 }

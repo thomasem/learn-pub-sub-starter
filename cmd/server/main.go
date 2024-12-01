@@ -12,7 +12,7 @@ import (
 	"github.com/bootdotdev/learn-pub-sub-starter/internal/signals"
 )
 
-func mustPublishJSON[T any](ch *amqp.Channel, exchange, key string, val T) {
+func safePublishJSON[T any](ch *amqp.Channel, exchange, key string, val T) {
 	err := pubsub.PublishJSON(
 		ch,
 		exchange,
@@ -21,17 +21,38 @@ func mustPublishJSON[T any](ch *amqp.Channel, exchange, key string, val T) {
 	)
 	if err != nil {
 		fmt.Println("Error sending pubsub message:", err)
-		os.Exit(1)
 	}
 }
 
-func mustPublishPaused(ch *amqp.Channel, paused bool) {
-	mustPublishJSON(
+func safePublishPaused(ch *amqp.Channel, paused bool) {
+	safePublishJSON(
 		ch,
 		routing.ExchangePerilDirect,
 		routing.PauseKey,
 		routing.PlayingState{IsPaused: paused},
 	)
+}
+
+func repl(ch *amqp.Channel) {
+	gamelogic.PrintServerHelp()
+	for {
+		input := gamelogic.GetInput()
+		if len(input) == 0 {
+			continue
+		}
+
+		switch input[0] {
+		case "quit":
+			gamelogic.PrintQuit()
+			os.Exit(0)
+		case "help":
+			gamelogic.PrintServerHelp()
+		case "pause":
+			safePublishPaused(ch, true)
+		case "resume":
+			safePublishPaused(ch, false)
+		}
+	}
 }
 
 func main() {
@@ -57,6 +78,17 @@ func main() {
 		os.Exit(1)
 	}
 
+	_, _, err = pubsub.DeclareAndBind(
+		conn,
+		routing.ExchangePerilTopic,
+		routing.GameLogSlug,
+		fmt.Sprintf("%s.*", routing.GameLogSlug),
+		pubsub.Durable,
+	)
+	if err != nil {
+		fmt.Println("Error declaring and binding log queue:", err)
+		os.Exit(1)
+	}
 	go func() {
 		signals.WaitForInterrupt()
 		// Maybe send pause or some message to client?
@@ -64,23 +96,5 @@ func main() {
 		os.Exit(0)
 	}()
 
-	gamelogic.PrintServerHelp()
-	for {
-		input := gamelogic.GetInput()
-		if len(input) == 0 {
-			continue
-		}
-
-		switch input[0] {
-		case "quit":
-			gamelogic.PrintQuit()
-			os.Exit(0)
-		case "help":
-			gamelogic.PrintServerHelp()
-		case "pause":
-			mustPublishPaused(ch, true)
-		case "resume":
-			mustPublishPaused(ch, false)
-		}
-	}
+	repl(ch)
 }

@@ -46,7 +46,41 @@ func main() {
 		fmt.Println("Error declaring queue:", err)
 		os.Exit(1)
 	}
-	signals.WaitForInterrupt()
-	fmt.Println("\nInterrupt detected. Exiting...")
 
+	go func() {
+		signals.WaitForInterrupt()
+		fmt.Println("\nInterrupt detected. Exiting...")
+		os.Exit(0)
+	}()
+
+	gameState := gamelogic.NewGameState(username)
+	for {
+		words := gamelogic.GetInput()
+		if len(words) == 0 {
+			continue
+		}
+
+		var err error
+		switch words[0] {
+		case "spawn":
+			err = gameState.CommandSpawn(words)
+		case "move":
+			_, err = gameState.CommandMove(words)
+		case "status":
+			gameState.CommandStatus()
+		case "spam":
+			fmt.Println("Spamming not allowed yet!")
+		case "quit":
+			gamelogic.PrintQuit()
+			os.Exit(0)
+		case "help":
+			gamelogic.PrintClientHelp()
+		default:
+			fmt.Println("Unknown command:", words[0])
+			gamelogic.PrintClientHelp()
+		}
+		if err != nil {
+			fmt.Println("Error:", err)
+		}
+	}
 }

@@ -12,6 +12,45 @@ import (
 	"github.com/bootdotdev/learn-pub-sub-starter/internal/signals"
 )
 
+func handlerPaused(gs *gamelogic.GameState) func(routing.PlayingState) {
+	return func(ps routing.PlayingState) {
+		defer fmt.Print("> ")
+		gs.HandlePause(ps)
+	}
+}
+
+func repl(gs *gamelogic.GameState) {
+	for {
+		words := gamelogic.GetInput()
+		if len(words) == 0 {
+			continue
+		}
+
+		var err error
+		switch words[0] {
+		case "spawn":
+			err = gs.CommandSpawn(words)
+		case "move":
+			_, err = gs.CommandMove(words)
+		case "status":
+			gs.CommandStatus()
+		case "spam":
+			fmt.Println("Spamming not allowed yet!")
+		case "quit":
+			gamelogic.PrintQuit()
+			os.Exit(0)
+		case "help":
+			gamelogic.PrintClientHelp()
+		default:
+			fmt.Println("Unknown command:", words[0])
+			gamelogic.PrintClientHelp()
+		}
+		if err != nil {
+			fmt.Println("Error:", err)
+		}
+	}
+}
+
 func main() {
 	fmt.Println("Starting Peril client...")
 
@@ -53,34 +92,19 @@ func main() {
 		os.Exit(0)
 	}()
 
-	gameState := gamelogic.NewGameState(username)
-	for {
-		words := gamelogic.GetInput()
-		if len(words) == 0 {
-			continue
-		}
-
-		var err error
-		switch words[0] {
-		case "spawn":
-			err = gameState.CommandSpawn(words)
-		case "move":
-			_, err = gameState.CommandMove(words)
-		case "status":
-			gameState.CommandStatus()
-		case "spam":
-			fmt.Println("Spamming not allowed yet!")
-		case "quit":
-			gamelogic.PrintQuit()
-			os.Exit(0)
-		case "help":
-			gamelogic.PrintClientHelp()
-		default:
-			fmt.Println("Unknown command:", words[0])
-			gamelogic.PrintClientHelp()
-		}
-		if err != nil {
-			fmt.Println("Error:", err)
-		}
+	gs := gamelogic.NewGameState(username)
+	err = pubsub.SubscribeJSON(
+		conn,
+		routing.ExchangePerilDirect,
+		fmt.Sprintf("%s.%s", routing.PauseKey, username),
+		routing.PauseKey,
+		pubsub.Transient,
+		handlerPaused(gs),
+	)
+	if err != nil {
+		fmt.Println("Error subscribing to pause queue:", err)
+		os.Exit(1)
 	}
+
+	repl(gs)
 }

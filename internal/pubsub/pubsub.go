@@ -15,6 +15,14 @@ const (
 	Transient
 )
 
+type AckType int
+
+const (
+	Ack AckType = iota
+	NackRequeue
+	NackDiscard
+)
+
 func DeclareAndBind(
 	conn *amqp.Connection,
 	exchange,
@@ -33,7 +41,9 @@ func DeclareAndBind(
 		queueType == Transient,
 		queueType == Transient,
 		false,
-		nil,
+		amqp.Table{
+			"x-dead-letter-exchange": "peril_dlx",
+		},
 	)
 	if err != nil {
 		return nil, q, err
@@ -63,13 +73,27 @@ func PublishJSON[T any](ch *amqp.Channel, exchange, key string, val T) error {
 	)
 }
 
+func handleAck(msg amqp.Delivery, ackType AckType) {
+	switch ackType {
+	case Ack:
+		fmt.Println("Acking message...")
+		msg.Ack(false)
+	case NackRequeue:
+		fmt.Println("Nacking message (requeue)...")
+		msg.Nack(false, true)
+	case NackDiscard:
+		fmt.Println("Nacking message (discard)...")
+		msg.Nack(false, false)
+	}
+}
+
 func SubscribeJSON[T any](
 	conn *amqp.Connection,
 	exchange string,
 	queueName string,
 	key string,
 	queueType QueueType,
-	handler func(T),
+	handler func(T) AckType,
 ) error {
 	ch, q, err := DeclareAndBind(conn, exchange, queueName, key, queueType)
 	if err != nil {
@@ -87,8 +111,8 @@ func SubscribeJSON[T any](
 				fmt.Println("Error unmarshalling message:", err)
 				continue
 			}
-			handler(val)
-			msg.Ack(false)
+			ackType := handler(val)
+			handleAck(msg, ackType)
 		}
 	}()
 	return nil

@@ -1,7 +1,9 @@
 package pubsub
 
 import (
+	"bytes"
 	"context"
+	"encoding/gob"
 	"encoding/json"
 	"fmt"
 
@@ -73,16 +75,33 @@ func PublishJSON[T any](ch *amqp.Channel, exchange, key string, val T) error {
 	)
 }
 
+func PublishGob[T any](ch *amqp.Channel, exchange, key string, val T) error {
+	var buffer bytes.Buffer
+	enc := gob.NewEncoder(&buffer)
+	err := enc.Encode(val)
+	if err != nil {
+		return err
+	}
+	return ch.PublishWithContext(
+		context.Background(),
+		exchange,
+		key,
+		false,
+		false,
+		amqp.Publishing{
+			ContentType: "application/gob",
+			Body:        buffer.Bytes(),
+		},
+	)
+}
+
 func handleAck(msg amqp.Delivery, ackType AckType) {
 	switch ackType {
 	case Ack:
-		fmt.Println("Acking message...")
 		msg.Ack(false)
 	case NackRequeue:
-		fmt.Println("Nacking message (requeue)...")
 		msg.Nack(false, true)
 	case NackDiscard:
-		fmt.Println("Nacking message (discard)...")
 		msg.Nack(false, false)
 	}
 }

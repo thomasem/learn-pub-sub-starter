@@ -35,7 +35,11 @@ func safePublishPaused(ch *amqp.Channel, paused bool) {
 
 func handlerLogs(log routing.GameLog) pubsub.AckType {
 	defer fmt.Print("> ")
-	gamelogic.WriteLog(log)
+	err := gamelogic.WriteLog(log)
+	if err != nil {
+		fmt.Println("Error writing game log:", err)
+		return pubsub.NackDiscard
+	}
 	return pubsub.Ack
 }
 
@@ -62,7 +66,7 @@ func repl(ch *amqp.Channel) {
 }
 
 func main() {
-	fmt.Println("Startng Peril server...")
+	fmt.Println("Starting Peril server...")
 
 	url := "amqp://guest:guest@localhost:5672/"
 	conn, err := amqp.Dial(url)

@@ -1,8 +1,10 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -40,6 +42,30 @@ func handlerPaused(gs *gamelogic.GameState) func(routing.PlayingState) pubsub.Ac
 		gs.HandlePause(ps)
 		return pubsub.Ack
 	}
+}
+
+func CommandSpam(gs *gamelogic.GameState, ch *amqp.Channel, words []string) error {
+	if len(words) < 2 {
+		return errors.New("usage: spam <count>")
+	}
+
+	num, err := strconv.Atoi(words[1])
+	if err != nil {
+		return fmt.Errorf("error: %s is not an valid count", words[1])
+	}
+
+	for i := 0; i < num; i++ {
+		logStr := gamelogic.GetMaliciousLog()
+		err := publishLog(ch, routing.GameLog{
+			CurrentTime: time.Now(),
+			Message:     logStr,
+			Username:    gs.GetUsername(),
+		})
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func handlerMove(gs *gamelogic.GameState, ch *amqp.Channel) func(gamelogic.ArmyMove) pubsub.AckType {
@@ -96,7 +122,7 @@ func handlerWarRecognition(gs *gamelogic.GameState, ch *amqp.Channel) func(gamel
 			err := publishLog(ch, routing.GameLog{
 				CurrentTime: time.Now(),
 				Message:     fmt.Sprintf("A war between %s and %s resulted in a draw", winner, loser),
-				Username:    gs.Player.Username,
+				Username:    gs.GetUsername(),
 			})
 			if err != nil {
 				fmt.Println("Error sending game log:", err)
@@ -129,7 +155,7 @@ func repl(gs *gamelogic.GameState, ch *amqp.Channel) {
 		case "status":
 			gs.CommandStatus()
 		case "spam":
-			fmt.Println("Spamming not allowed yet!")
+			CommandSpam(gs, ch, words)
 		case "quit":
 			gamelogic.PrintQuit()
 			os.Exit(0)

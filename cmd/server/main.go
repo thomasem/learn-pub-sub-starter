@@ -33,6 +33,12 @@ func safePublishPaused(ch *amqp.Channel, paused bool) {
 	)
 }
 
+func handlerLogs(log routing.GameLog) pubsub.AckType {
+	defer fmt.Print("> ")
+	gamelogic.WriteLog(log)
+	return pubsub.Ack
+}
+
 func repl(ch *amqp.Channel) {
 	gamelogic.PrintServerHelp()
 	for {
@@ -78,17 +84,19 @@ func main() {
 		os.Exit(1)
 	}
 
-	_, _, err = pubsub.DeclareAndBind(
+	err = pubsub.SubscribeGob(
 		conn,
 		routing.ExchangePerilTopic,
 		routing.GameLogSlug,
 		fmt.Sprintf("%s.*", routing.GameLogSlug),
 		pubsub.Durable,
+		handlerLogs,
 	)
 	if err != nil {
-		fmt.Println("Error declaring and binding log queue:", err)
+		fmt.Println("Error subscribing to log queue:", err)
 		os.Exit(1)
 	}
+
 	go func() {
 		signals.WaitForInterrupt()
 		// Maybe send pause or some message to client?
